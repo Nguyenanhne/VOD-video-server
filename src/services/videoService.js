@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const { exec } = require("child_process");
+const {db} = require('../config/firebase');
 
 const UPLOAD_VIDEO_DIR = path.join(__dirname, "..", "videos");
 const SEGMENT_VIDEO_DIR = path.join(__dirname, "..", "videos_hls");
@@ -49,15 +50,23 @@ const cutVideoHLS = async (fileName, resolutions) => {
   const outputFiles = [];
   const segmentFiles = [];
 
+  await db.ref(`video_processing/video`).update({
+    status: "Đang xử lý video",
+    resolutions: Object.fromEntries(resolutions.map(res => [res, "Đang chờ xử lý"]))
+  });
+
   for (const resolution of resolutions) {
+    await db.ref(`video_processing/video/resolutions/${resolution}`).set("Đang xử lý");
     console.log(`Đang tiến hành xử lý: ${resolution}p `)
     const outputDir = path.join(SEGMENT_VIDEO_DIR, `${baseFileName}_${resolution}p`);
     const { playlistFile, segmentFiles: segments } = await processHLS(videoPath, baseFileName, resolution, outputDir);
     outputFiles.push(playlistFile);
     segmentFiles.push(...segments);
+    await db.ref(`video_processing/video/resolutions/${resolution}`).set("Hoàn thành");
   }
   generateMasterPlaylist(baseFileName, resolutions, SEGMENT_VIDEO_DIR);
   fs.unlinkSync(videoPath); // Xóa video gốc
+  await db.ref(`video_processing/video`).update({ status: "Đã xử lý video xong" });
   console.log(`Video cắt thành công thành HLS `)
   return {
     message: "Video cắt thành công thành HLS",
@@ -80,16 +89,28 @@ const cutTrailerHLS = async (fileName) => {
   const outputFiles = [];
   const segmentFiles = [];
 
+  // Cập nhật trạng thái ban đầu vào Firebase
+  await db.ref(`video_processing/video`).update({
+    status: "Đang xử lý video",
+    resolutions: Object.fromEntries(resolutions.map(res => [res, "Đang chờ xử lý"]))
+  });
+
   for (const resolution of resolutions) {
+    await db.ref(`video_processing/video/resolutions/${resolution}`).set("Đang xử lý");
     console.log(`Đang tiến hành xử lý: ${resolution}p `)
     const outputDir = path.join(SEGMENT_TRAILER_DIR, `${baseFileName}_${resolution}p`);
     const { playlistFile, segmentFiles: segments } = await processHLS(videoPath, baseFileName, resolution, outputDir);
     outputFiles.push(playlistFile);
     segmentFiles.push(...segments);
+
+    // ✅ Cập nhật trạng thái độ phân giải lên Firebase
+    await db.ref(`video_processing/video/resolutions/${resolution}`).set("Hoàn thành");
   }
+  await db.ref(`video_processing/video`).update({ status: "Hoàn thành" });
   generateMasterPlaylist(baseFileName, resolutions, SEGMENT_TRAILER_DIR);
   fs.unlinkSync(videoPath); // Xóa trailer gốc
   console.log(`Trailer cắt thành công thành HLS `)
+  await db.ref(`video_processing/video`).update({ status: "Đã xử lý video xong" });
   return {
     message: "Trailer cắt thành công thành HLS",
     files: outputFiles.map(file => `/trailers_hls/${path.basename(file)}`),

@@ -9,6 +9,7 @@ const uploadRoutes = require("./src/routes/uploadRoutes");
 const videoRoutes = require("./src/routes/videoRoutes");
 const uploadS3Routes = require("./src/routes/uploadS3Routes")
 
+
 app.use("/api/upload", uploadRoutes);
 app.use("/api/video", videoRoutes);
 app.use("/api/upload", uploadS3Routes)
